@@ -1,0 +1,5 @@
+/target
+config.local.toml
+.env
+*.pem
+*.key

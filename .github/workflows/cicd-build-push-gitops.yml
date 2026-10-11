@@ -1,0 +1,223 @@
+name: Test, Build, Push, Generate YAML, Notify ArgoCD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CARGO_TERM_COLOR: always
+  SERVICE_NAME: ${{ github.event.repository.name }}
+  DOCKER_REGISTRY: ${{ vars.ORG_DOCKER_REGISTRY }}
+  DOCKER_REGISTRY_USERNAME: ${{ secrets.ORG_DOCKER_REGISTRY_USERNAME }}
+  DOCKER_REGISTRY_PASSWORD: ${{ secrets.ORG_DOCKER_REGISTRY_PASSWORD }}
+  IMAGE_REPOSITORY: ${{ format('{0}/{1}', vars.ORG_DOCKER_NAMESPACE, vars.ORG_IMAGE_NAMESPACE) }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --locked
+
+  build-and-push:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      app_version: ${{ steps.semver.outputs.version }}
+      image_tag: ${{ steps.image_tag.outputs.image_tag }}
+      image_ref: ${{ steps.export_image.outputs.image_ref }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Resolve version bump type
+        id: bump
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          BUMP_TYPE="patch"
+
+          if echo "$COMMIT_MESSAGE" | grep -qi "tag-major"; then
+            BUMP_TYPE="major"
+          elif echo "$COMMIT_MESSAGE" | grep -qi "tag-minor"; then
+            BUMP_TYPE="minor"
+          fi
+
+          echo "bump_type=${BUMP_TYPE}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump crate version
+        id: semver
+        run: |
+          CURRENT=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          IFS=. read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          case "${{ steps.bump.outputs.bump_type }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            *)     PATCH=$((PATCH + 1)) ;;
+          esac
+
+          VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          # Only the [package] version line (first match) is rewritten; dependency versions are untouched.
+          sed -i "0,/^version = \"${CURRENT}\"/s//version = \"${VERSION}\"/" Cargo.toml
+          cargo update --workspace --offline
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image tag
+        id: image_tag
+        run: |
+          VERSION_COMPACT=$(echo "${{ steps.semver.outputs.version }}" | tr -d '.')
+          if [ -z "$VERSION_COMPACT" ]; then
+            echo "Version compact tag is empty"
+            exit 1
+          fi
+          BRANCH_SAFE=$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's#[^a-z0-9._-]+#-#g' | sed -E 's#^-+|-+$##g')
+          echo "image_tag=${{ env.SERVICE_NAME }}-${BRANCH_SAFE}-${VERSION_COMPACT}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add Cargo.toml Cargo.lock
+
+          if git diff --cached --quiet; then
+            echo "No version change to commit."
+            exit 0
+          fi
+
+          git commit -m "ci: bump version to v${{ steps.semver.outputs.version }} [skip ci]"
+          git push
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ env.DOCKER_REGISTRY_USERNAME }}
+          password: ${{ env.DOCKER_REGISTRY_PASSWORD }}
+
+      # The Dockerfile cross-compiles on the runner (tonistiigi/xx), so no QEMU is needed.
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/arm64
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.image_tag.outputs.image_tag }}
+            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:${{ env.SERVICE_NAME }}-sha-${{ github.sha }}
+
+      - name: Export image reference (version tag)
+        id: export_image
+        run: |
+          echo "image_ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.image_tag.outputs.image_tag }}" >> "$GITHUB_OUTPUT"
+
+  generate-and-commit-manifests:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync to latest branch head
+        run: |
+          git checkout "${GITHUB_REF_NAME}"
+          git pull origin "${GITHUB_REF_NAME}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Update image in deploy/services.json
+        env:
+          IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
+        run: |
+          node -e '
+          const fs = require("fs");
+          const path = "deploy/services.json";
+
+          if (!process.env.IMAGE_REF) {
+            throw new Error("IMAGE_REF is empty. Check build-and-push job outputs and registry variables.");
+          }
+
+          const config = JSON.parse(fs.readFileSync(path, "utf8"));
+          if (!Array.isArray(config.deployments) || config.deployments.length === 0) {
+            throw new Error("services.json must contain deployments array");
+          }
+
+          config.deployments = config.deployments.map((deployment, index) => {
+            if (!deployment || !deployment.name || !deployment.containerPort) {
+              throw new Error(`Deployment at index ${index} is missing name or containerPort.`);
+            }
+            return { ...deployment, image: process.env.IMAGE_REF };
+          });
+
+          fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
+          '
+
+      - name: Generate deployment files
+        run: node deploy/create-deployment-files.js
+
+      - name: Commit generated files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add deploy/services.json deploy/ymls
+
+          if git diff --cached --quiet; then
+            echo "No manifest changes to commit."
+            exit 0
+          fi
+
+          git commit -m "ci: update image and generated kubernetes manifests [skip ci]"
+          git push

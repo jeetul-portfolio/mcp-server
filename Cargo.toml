@@ -1,0 +1,33 @@
+[package]
+name = "portfolio-mcp"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+description = "OAuth-protected, admin-only MCP server for managing portfolio content"
+publish = false
+
+[dependencies]
+rmcp = { version = "3.5.1", features = ["server", "macros", "schemars", "transport-io", "transport-streamable-http-server"] }
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+tokio-util = "0.7"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+jsonwebtoken = "9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+toml = { version = "0.8", default-features = false, features = ["parse"] }
+async-trait = "0.1"
+
+[dev-dependencies]
+toml = { version = "0.8", default-features = false, features = ["parse", "display"] }
+p256 = { version = "0.13", features = ["ecdsa", "pem"] }
+base64 = "0.22"
+tokio-test = "0.4"
+rand_core = { version = "0.6", features = ["getrandom"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

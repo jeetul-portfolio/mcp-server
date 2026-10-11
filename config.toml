@@ -1,0 +1,18 @@
+# Deployed configuration (baked into the Docker image at /app/config.toml).
+# For local runs copy config.example.toml to config.local.toml and use --config ./config.local.toml.
+
+[server]
+transport = "http"
+bind = "0.0.0.0:8080"
+allow_remote = true
+behind_tls_proxy = true
+allow_internal_http = true
+resource_uri = "https://mcp.jeetul.com/mcp"
+log_level = "info"
+
+[oauth]
+issuer = "https://apis.jeetul.com"
+jwks_url = "http://core.portfolio.svc.cluster.local:8080/oauth/jwks"
+
+[core]
+base_url = "http://core.portfolio.svc.cluster.local:8080"

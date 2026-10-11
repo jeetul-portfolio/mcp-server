@@ -1,0 +1,21 @@
+# Local development template. Copy to config.local.toml (git-ignored) and fill in real values.
+# Run: cargo run -- --config ./config.local.toml   (config.toml is the deployed config baked into the image)
+# Unknown keys are rejected; security-relevant settings fail closed when missing or invalid.
+
+[server]
+transport = "http"                          # "http" (OAuth-protected) | "stdio" (local process only)
+bind = "127.0.0.1:8765"                     # loopback by default
+# allow_remote = true                       # both required for a non-loopback bind, and a
+# behind_tls_proxy = true                   #   TLS-terminating proxy must front the server
+# allow_internal_http = true                # allow http for core.base_url /
+                                            #   oauth.jwks_url on a private network (e.g. k8s)
+resource_uri = "http://127.0.0.1:8765/mcp"  # canonical public URL of /mcp (token audience); https unless loopback
+log_level = "info"                          # tracing filter, e.g. "info" or "portfolio_mcp=debug"
+
+[oauth]                                     # required for transport = "http"; core is the authorization server
+issuer = "http://127.0.0.1:3000"            # https unless loopback
+# jwks_url = "http://127.0.0.1:3000/oauth/jwks"   # default: <issuer>/oauth/jwks
+
+[core]
+base_url = "http://127.0.0.1:3000"
+# service_name = "core"                     # API prefix: <base_url>/apis/<service_name>/
