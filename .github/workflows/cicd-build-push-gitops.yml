@@ -97,9 +97,14 @@ jobs:
           esac
 
           VERSION="${MAJOR}.${MINOR}.${PATCH}"
-          # Only the [package] version line (first match) is rewritten; dependency versions are untouched.
+          # Rewrite only this crate's own version: the [package] line in Cargo.toml and the matching
+          # entry in Cargo.lock. No dependency resolution (a fresh runner has no registry index).
           sed -i "0,/^version = \"${CURRENT}\"/s//version = \"${VERSION}\"/" Cargo.toml
-          cargo update --workspace --offline
+          sed -i "/^name = \"portfolio-mcp\"$/{n;s/^version = \"${CURRENT}\"$/version = \"${VERSION}\"/}" Cargo.lock
+
+          grep -q "^version = \"${VERSION}\"" Cargo.toml || { echo "Cargo.toml not bumped"; exit 1; }
+          grep -A1 '^name = "portfolio-mcp"$' Cargo.lock | grep -q "^version = \"${VERSION}\"$" \
+            || { echo "Cargo.lock not bumped"; exit 1; }
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Build image tag
