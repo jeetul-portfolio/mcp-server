@@ -184,7 +184,9 @@ jobs:
 
       - name: Update image in deploy/services.json
         env:
-          IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
+          # Rebuilt here (as in core) instead of passing image_ref between jobs: GitHub drops job
+          # outputs containing a secret value, and the registry namespace equals the registry username.
+          IMAGE_REF: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:${{ needs.build-and-push.outputs.image_tag }}
         run: |
           node -e '
           const fs = require("fs");
