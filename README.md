@@ -95,8 +95,9 @@ variables are read.
 | `core.base_url` | yes | core API is `<base_url>/apis/<service_name>/` (`service_name` defaults to `core`) |
 
 Unknown keys, wrong types and missing security settings stop startup with an error that names the key/line but
-never echoes values. Core's OAuth routes return `503` until `OAUTH_ISSUER`, `OAUTH_RESOURCE_URI`,
-`OAUTH_SIGNING_PRIVATE_KEY` (EC P-256 PEM) and `OAUTH_KEY_ID` are set in core. Run the OAuth migrations in
+never echoes values. Core's OAuth settings have defaults in `core/config/backend-config.js` (issuer `https://apis.jeetul.com`,
+resource `https://mcp.jeetul.com/mcp`, key id, and a signing seed from which the ES256 key is derived; a PEM
+key is also accepted). Each can be overridden with its `OAUTH_*` env var. Run the OAuth migrations in
 `migrations/`.
 
 ## Run locally
@@ -122,7 +123,8 @@ claude mcp add portfolio -- /path/to/portfolio-mcp --config /path/to/stdio-confi
   an https `server.resource_uri`, and restrict by firewall/VPN. The server validates the `Host` header against
   the resource URI's host.
 * Behind a proxy set Express `trust proxy` in core so its per-IP rate limits see client IPs.
-* Rotate `OAUTH_SIGNING_PRIVATE_KEY` by changing `OAUTH_KEY_ID` (clients refetch JWKS on unknown `kid`).
+* Rotate the signing seed by changing both `signingPrivateKey` and `keyId` in core's config (clients refetch
+  JWKS on an unknown `kid`; existing tokens expire within 10 minutes).
 
 ## Docker & CI/CD
 
