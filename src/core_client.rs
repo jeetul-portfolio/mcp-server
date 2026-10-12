@@ -5,7 +5,7 @@
 
 use crate::application::{AppError, PortfolioApi};
 use crate::config::CoreConfig;
-use crate::domain::{Entity, Op};
+use crate::domain::Op;
 use reqwest::{Method, StatusCode};
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -36,9 +36,13 @@ fn plan(op: Op) -> Request {
     match op {
         Op::List { entity, query } => Request {
             query,
-            ..req(Method::GET, entity.path().into())
+            ..req(Method::GET, entity.read_path().into())
         },
-        Op::Get { entity, id } => req(Method::GET, format!("{}/{id}", entity.path())),
+        Op::Get { entity, id } => req(Method::GET, format!("{}/{id}", entity.read_path())),
+        Op::GetBySlug { entity, slug } => req(
+            Method::GET,
+            format!("{}/{}", entity.read_path(), slug.as_str()),
+        ),
         Op::Create { entity, body } => Request {
             body: Some(body),
             ..req(Method::POST, entity.path().into())
@@ -52,12 +56,17 @@ fn plan(op: Op) -> Request {
             }
         }
         Op::Delete { entity, id } => req(Method::DELETE, format!("{}/{id}", entity.path())),
-        Op::SetArticlePublished { id, publish } => Request {
+        Op::SetPublished {
+            entity,
+            id,
+            publish,
+        } => Request {
             body: Some(json!({ "action": if publish { "publish" } else { "unpublish" } })),
-            ..req(
-                Method::PATCH,
-                format!("{}/{id}/publish", Entity::Article.path()),
-            )
+            ..req(Method::PATCH, format!("{}/{id}/publish", entity.path()))
+        },
+        Op::Reorder { entity, ids } => Request {
+            body: Some(json!({ "ids": ids })),
+            ..req(Method::PUT, format!("{}/reorder", entity.path()))
         },
         Op::GetActiveResume => req(Method::GET, "resumes/active".into()),
         Op::ActivateResume { id } => req(Method::PUT, format!("resumes/{id}/activate")),

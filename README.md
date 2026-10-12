@@ -15,7 +15,7 @@ Core stays the single source of truth (Joi validation, tag sync, MySQL). This se
 
 | Module | Layer | Responsibility |
 |---|---|---|
-| `domain.rs` | domain | closed set of operations (`Op`, `Entity`), id/page validation |
+| `domain.rs` | domain | closed set of operations (`Op`, `Entity`), id/page/slug/reorder validation |
 | `application.rs` | application | `PortfolioApi` port + safe `AppError` categories |
 | `core_client.rs` | infrastructure | `PortfolioApi` over core's REST API (internal scopes header, no credentials) |
 | `config.rs` | infrastructure | `config.toml` parsing (unknown keys rejected), fail-closed validation |
@@ -38,9 +38,15 @@ All tools return `{"data": ...}` or an error result `{"error": <code>, "message"
 | categories | `portfolio_categories_{list,get,create,update,delete}` — `name`, `description`, `sortOrder` (`includeSkills` on list) |
 | articles | `portfolio_articles_{list,get,create,update,delete}`, `portfolio_articles_set_published` — `title`, `content`, `authorName` (all required on create), `tags[]`, `excerpt`, `coverImage`, `authorAvatar`, `status`, `publishedAt` |
 | tags | `portfolio_tags_{list,get,create,update,delete}` — `name`, `group`, `color`, `description`, `isSeoEnabled`, `isInternal` |
+| experiences | `portfolio_experiences_{list,get,create,update,delete,set_published,reorder}` — `role`, `company` (required on create), `slug`, `companyUrl`, `logoUrl`, `location`, `employmentType`, `startDate`/`endDate` (YYYY-MM-DD), `isCurrent`, `summary`, `description`, `responsibilities[]`, `achievements[]`, `technologies[]`, `tags[]`, `skillIds[]`, `links[{label, url}]`, `sortOrder`, `status` (`status` filter on list) |
+| projects | `portfolio_projects_{list,get,create,update,delete,set_published,reorder}` — `title` (required on create), `slug`, `summary`, `description`, `problem`, `solution`, `technicalDecisions`, `outcomes`, `technologies[]`, `tags[]`, `skillIds[]`, `links[{type: repository\|demo\|documentation\|other, label, url}]`, `coverImage`, `images[{url, alt}]`, `isFeatured`, `sortOrder`, `status` (`status`, `featured`, `tag` filters on list) |
 | resumes | `portfolio_resumes_{list,get_active,activate,delete}` (PDF upload is deliberately not exposed) |
 
-Lists accept `page` (≥1), `pageSize` (1–500) and `search`. Full JSON schemas: `tools/list`.
+Lists accept `page` (≥1), `pageSize` (1–500) and `search`. Experience/project `list` and `get` use core's
+`admin/*` read routes, so drafts are included; `get` takes exactly one of `id` or `slug` (slug validated locally
+against `^[a-z0-9]+(?:-[a-z0-9]+)*$`, max 160). `reorder` takes a non-empty list of unique ids and sets each one's
+`sortOrder` to its position. Array fields in updates replace the whole list; because unset/null fields are
+dropped, an update cannot clear a nullable field. Full JSON schemas: `tools/list`.
 Not exposed: users, roles, profile, git sync, raw SQL/HTTP/filesystem access.
 
 ## Authentication & authorization
@@ -60,7 +66,7 @@ Not exposed: users, roles, profile, git sync, raw SQL/HTTP/filesystem access.
 * The caller's token is **not** forwarded to core (no token passthrough). Calls to core are **internal
   in-cluster calls**: the server sends `X-Internal-Scopes: portfolio:admin` and no credentials. Core maps that
   scope to its `service` role, accepted only on the content routes (skills, categories, articles, tags,
-  resumes); users, roles, applications and auth stay human-admin only. The public `service-request-router`
+  experiences, projects, resumes); users, roles, applications and auth stay human-admin only. The public `service-request-router`
   strips `X-Internal-Scopes` from every request it forwards (covered by a Go test).
 * **stdio transport** (`server.transport = "stdio"`): no OAuth; the trust boundary is the spawning local process.
 

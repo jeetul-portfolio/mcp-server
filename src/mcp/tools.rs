@@ -2,7 +2,7 @@
 //! the result; all business rules live in portfolio core.
 
 use crate::application::{AppError, PortfolioApi};
-use crate::domain::{validate_id, validate_page, Entity, Op};
+use crate::domain::{id_or_slug, validate_id, validate_ids, validate_page, Entity, Op};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ServerCapabilities, ServerConfig};
@@ -128,7 +128,7 @@ pub struct NewArticle {
     /// Absolute URL.
     pub author_avatar: Option<String>,
     /// `draft` (default) or `published`.
-    pub status: Option<ArticleStatus>,
+    pub status: Option<PublishStatus>,
     /// ISO-8601 timestamp.
     pub published_at: Option<String>,
 }
@@ -145,15 +145,223 @@ pub struct ArticlePatch {
     /// Author display name (1-120 chars); cannot be cleared.
     pub author_name: Option<String>,
     pub author_avatar: Option<String>,
-    pub status: Option<ArticleStatus>,
+    pub status: Option<PublishStatus>,
     pub published_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
-pub enum ArticleStatus {
+pub enum PublishStatus {
     Draft,
     Published,
+}
+
+impl PublishStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            PublishStatus::Draft => "draft",
+            PublishStatus::Published => "published",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct IdOrSlugInput {
+    /// Record id. Provide exactly one of id or slug.
+    pub id: Option<u64>,
+    /// Record slug (lowercase letters/digits separated by hyphens).
+    pub slug: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ReorderInput {
+    /// Record ids in the desired order (unique); each gets sortOrder = its position.
+    pub ids: Vec<u64>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExperienceListInput {
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+    pub search: Option<String>,
+    /// Only records with this status (default: all, including drafts).
+    pub status: Option<PublishStatus>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectListInput {
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+    pub search: Option<String>,
+    /// Only records with this status (default: all, including drafts).
+    pub status: Option<PublishStatus>,
+    pub featured: Option<bool>,
+    /// Filter by a single tag name.
+    pub tag: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ExperienceLink {
+    pub label: String,
+    /// Absolute http(s) URL.
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ProjectLinkType {
+    Repository,
+    Demo,
+    Documentation,
+    Other,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ProjectLink {
+    #[serde(rename = "type")]
+    pub kind: ProjectLinkType,
+    pub label: String,
+    /// Absolute http(s) URL.
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ProjectImage {
+    /// Absolute http(s) URL.
+    pub url: String,
+    pub alt: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct NewExperience {
+    /// Job title.
+    pub role: String,
+    /// Organization name.
+    pub company: String,
+    /// Generated from role + company when omitted; must be unique.
+    pub slug: Option<String>,
+    /// Absolute http(s) URL.
+    pub company_url: Option<String>,
+    /// Absolute http(s) URL.
+    pub logo_url: Option<String>,
+    pub location: Option<String>,
+    /// Free text, max 50 chars (default Full-time).
+    pub employment_type: Option<String>,
+    /// YYYY-MM-DD.
+    pub start_date: Option<String>,
+    /// YYYY-MM-DD, on or after startDate; ignored when isCurrent is true.
+    pub end_date: Option<String>,
+    pub is_current: Option<bool>,
+    /// Short plain text.
+    pub summary: Option<String>,
+    /// Markdown.
+    pub description: Option<String>,
+    pub responsibilities: Option<Vec<String>>,
+    pub achievements: Option<Vec<String>>,
+    pub technologies: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>,
+    /// Ids of existing skills.
+    pub skill_ids: Option<Vec<u64>>,
+    pub links: Option<Vec<ExperienceLink>>,
+    pub sort_order: Option<u32>,
+    /// `draft` (default) or `published`.
+    pub status: Option<PublishStatus>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExperiencePatch {
+    pub role: Option<String>,
+    pub company: Option<String>,
+    pub slug: Option<String>,
+    /// Absolute http(s) URL.
+    pub company_url: Option<String>,
+    /// Absolute http(s) URL.
+    pub logo_url: Option<String>,
+    pub location: Option<String>,
+    pub employment_type: Option<String>,
+    /// YYYY-MM-DD.
+    pub start_date: Option<String>,
+    /// YYYY-MM-DD.
+    pub end_date: Option<String>,
+    /// true clears endDate.
+    pub is_current: Option<bool>,
+    pub summary: Option<String>,
+    /// Markdown.
+    pub description: Option<String>,
+    pub responsibilities: Option<Vec<String>>,
+    pub achievements: Option<Vec<String>>,
+    pub technologies: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>,
+    /// Replaces the whole skill set.
+    pub skill_ids: Option<Vec<u64>>,
+    pub links: Option<Vec<ExperienceLink>>,
+    pub sort_order: Option<u32>,
+    pub status: Option<PublishStatus>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct NewProject {
+    pub title: String,
+    /// Generated from title when omitted; must be unique.
+    pub slug: Option<String>,
+    /// Short plain text.
+    pub summary: Option<String>,
+    /// Markdown.
+    pub description: Option<String>,
+    /// Markdown.
+    pub problem: Option<String>,
+    /// Markdown.
+    pub solution: Option<String>,
+    /// Markdown.
+    pub technical_decisions: Option<String>,
+    /// Markdown.
+    pub outcomes: Option<String>,
+    pub technologies: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>,
+    /// Ids of existing skills.
+    pub skill_ids: Option<Vec<u64>>,
+    pub links: Option<Vec<ProjectLink>>,
+    /// Absolute http(s) URL.
+    pub cover_image: Option<String>,
+    pub images: Option<Vec<ProjectImage>>,
+    pub is_featured: Option<bool>,
+    pub sort_order: Option<u32>,
+    /// `draft` (default) or `published`.
+    pub status: Option<PublishStatus>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectPatch {
+    pub title: Option<String>,
+    pub slug: Option<String>,
+    pub summary: Option<String>,
+    /// Markdown.
+    pub description: Option<String>,
+    /// Markdown.
+    pub problem: Option<String>,
+    /// Markdown.
+    pub solution: Option<String>,
+    /// Markdown.
+    pub technical_decisions: Option<String>,
+    /// Markdown.
+    pub outcomes: Option<String>,
+    pub technologies: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>,
+    /// Replaces the whole skill set.
+    pub skill_ids: Option<Vec<u64>>,
+    pub links: Option<Vec<ProjectLink>>,
+    /// Absolute http(s) URL.
+    pub cover_image: Option<String>,
+    pub images: Option<Vec<ProjectImage>>,
+    pub is_featured: Option<bool>,
+    pub sort_order: Option<u32>,
+    pub status: Option<PublishStatus>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -195,6 +403,8 @@ update_input!(UpdateSkillInput, SkillPatch);
 update_input!(UpdateCategoryInput, CategoryPatch);
 update_input!(UpdateArticleInput, ArticlePatch);
 update_input!(UpdateTagInput, TagPatch);
+update_input!(UpdateExperienceInput, ExperiencePatch);
+update_input!(UpdateProjectInput, ProjectPatch);
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PublishInput {
@@ -289,6 +499,22 @@ impl PortfolioServer {
             ));
         }
         Ok(Op::Update { entity, id, body })
+    }
+    fn get_by(entity: Entity, i: IdOrSlugInput) -> Result<Op, AppError> {
+        id_or_slug(entity, i.id, i.slug.as_deref()).map_err(AppError::Invalid)
+    }
+    fn set_published(entity: Entity, i: PublishInput) -> Result<Op, AppError> {
+        Ok(Op::SetPublished {
+            entity,
+            id: validate_id(i.id).map_err(AppError::Invalid)?,
+            publish: i.publish,
+        })
+    }
+    fn reorder(entity: Entity, i: ReorderInput) -> Result<Op, AppError> {
+        Ok(Op::Reorder {
+            entity,
+            ids: validate_ids(i.ids).map_err(AppError::Invalid)?,
+        })
     }
 }
 
@@ -458,15 +684,7 @@ impl PortfolioServer {
         &self,
         Parameters(i): Parameters<PublishInput>,
     ) -> CallToolResult {
-        self.run(
-            validate_id(i.id)
-                .map_err(AppError::Invalid)
-                .map(|id| Op::SetArticlePublished {
-                    id,
-                    publish: i.publish,
-                }),
-        )
-        .await
+        self.run(Self::set_published(Entity::Article, i)).await
     }
     #[tool(
         name = "portfolio_articles_delete",
@@ -521,6 +739,164 @@ impl PortfolioServer {
         self.run(Self::delete(Entity::Tag, i.id)).await
     }
 
+    // ---- experiences
+    #[tool(
+        name = "portfolio_experiences_list",
+        description = "List work experiences, including drafts (paginated, optional search/status).",
+        annotations(read_only_hint = true)
+    )]
+    async fn experiences_list(
+        &self,
+        Parameters(i): Parameters<ExperienceListInput>,
+    ) -> CallToolResult {
+        let extra = i
+            .status
+            .map(|s| ("status", s.as_str().to_owned()))
+            .into_iter()
+            .collect();
+        self.run(
+            list_query(i.page, i.page_size, i.search, extra).map(|query| Op::List {
+                entity: Entity::Experience,
+                query,
+            }),
+        )
+        .await
+    }
+    #[tool(
+        name = "portfolio_experiences_get",
+        description = "Get one experience by id or slug (drafts included).",
+        annotations(read_only_hint = true)
+    )]
+    async fn experiences_get(&self, Parameters(i): Parameters<IdOrSlugInput>) -> CallToolResult {
+        self.run(Self::get_by(Entity::Experience, i)).await
+    }
+    #[tool(
+        name = "portfolio_experiences_create",
+        description = "Create a work experience (draft by default). Requires role and company."
+    )]
+    async fn experiences_create(&self, Parameters(i): Parameters<NewExperience>) -> CallToolResult {
+        self.run(Self::create(Entity::Experience, &i)).await
+    }
+    #[tool(
+        name = "portfolio_experiences_update",
+        description = "Update an experience by id. Only supplied fields change; supplied arrays replace the whole list.",
+        annotations(idempotent_hint = true)
+    )]
+    async fn experiences_update(
+        &self,
+        Parameters(i): Parameters<UpdateExperienceInput>,
+    ) -> CallToolResult {
+        self.run(Self::update(Entity::Experience, i.id, &i.patch))
+            .await
+    }
+    #[tool(
+        name = "portfolio_experiences_set_published",
+        description = "Publish or unpublish an experience by id.",
+        annotations(idempotent_hint = true)
+    )]
+    async fn experiences_set_published(
+        &self,
+        Parameters(i): Parameters<PublishInput>,
+    ) -> CallToolResult {
+        self.run(Self::set_published(Entity::Experience, i)).await
+    }
+    #[tool(
+        name = "portfolio_experiences_reorder",
+        description = "Set the display order of experiences.",
+        annotations(idempotent_hint = true)
+    )]
+    async fn experiences_reorder(&self, Parameters(i): Parameters<ReorderInput>) -> CallToolResult {
+        self.run(Self::reorder(Entity::Experience, i)).await
+    }
+    #[tool(
+        name = "portfolio_experiences_delete",
+        description = "Permanently delete an experience by id.",
+        annotations(destructive_hint = true)
+    )]
+    async fn experiences_delete(&self, Parameters(i): Parameters<IdInput>) -> CallToolResult {
+        self.run(Self::delete(Entity::Experience, i.id)).await
+    }
+
+    // ---- projects
+    #[tool(
+        name = "portfolio_projects_list",
+        description = "List projects, including drafts (paginated, optional search/status/featured/tag).",
+        annotations(read_only_hint = true)
+    )]
+    async fn projects_list(&self, Parameters(i): Parameters<ProjectListInput>) -> CallToolResult {
+        let mut extra = Vec::new();
+        if let Some(s) = i.status {
+            extra.push(("status", s.as_str().to_owned()));
+        }
+        if let Some(f) = i.featured {
+            extra.push(("featured", f.to_string()));
+        }
+        if let Some(t) = i.tag {
+            extra.push(("tag", t));
+        }
+        self.run(
+            list_query(i.page, i.page_size, i.search, extra).map(|query| Op::List {
+                entity: Entity::Project,
+                query,
+            }),
+        )
+        .await
+    }
+    #[tool(
+        name = "portfolio_projects_get",
+        description = "Get one project by id or slug (drafts included).",
+        annotations(read_only_hint = true)
+    )]
+    async fn projects_get(&self, Parameters(i): Parameters<IdOrSlugInput>) -> CallToolResult {
+        self.run(Self::get_by(Entity::Project, i)).await
+    }
+    #[tool(
+        name = "portfolio_projects_create",
+        description = "Create a project (draft by default). Requires title."
+    )]
+    async fn projects_create(&self, Parameters(i): Parameters<NewProject>) -> CallToolResult {
+        self.run(Self::create(Entity::Project, &i)).await
+    }
+    #[tool(
+        name = "portfolio_projects_update",
+        description = "Update a project by id. Only supplied fields change; supplied arrays replace the whole list.",
+        annotations(idempotent_hint = true)
+    )]
+    async fn projects_update(
+        &self,
+        Parameters(i): Parameters<UpdateProjectInput>,
+    ) -> CallToolResult {
+        self.run(Self::update(Entity::Project, i.id, &i.patch))
+            .await
+    }
+    #[tool(
+        name = "portfolio_projects_set_published",
+        description = "Publish or unpublish a project by id.",
+        annotations(idempotent_hint = true)
+    )]
+    async fn projects_set_published(
+        &self,
+        Parameters(i): Parameters<PublishInput>,
+    ) -> CallToolResult {
+        self.run(Self::set_published(Entity::Project, i)).await
+    }
+    #[tool(
+        name = "portfolio_projects_reorder",
+        description = "Set the display order of projects.",
+        annotations(idempotent_hint = true)
+    )]
+    async fn projects_reorder(&self, Parameters(i): Parameters<ReorderInput>) -> CallToolResult {
+        self.run(Self::reorder(Entity::Project, i)).await
+    }
+    #[tool(
+        name = "portfolio_projects_delete",
+        description = "Permanently delete a project by id.",
+        annotations(destructive_hint = true)
+    )]
+    async fn projects_delete(&self, Parameters(i): Parameters<IdInput>) -> CallToolResult {
+        self.run(Self::delete(Entity::Project, i.id)).await
+    }
+
     // ---- resumes (upload of new PDFs is intentionally not exposed: no filesystem access)
     #[tool(
         name = "portfolio_resumes_list",
@@ -569,6 +945,6 @@ impl PortfolioServer {
 impl ServerHandler for PortfolioServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
-            .with_instructions("Admin tools for managing portfolio content (skills, categories, articles, tags, resumes).")
+            .with_instructions("Admin tools for managing portfolio content (skills, categories, articles, tags, experiences, projects, resumes).")
     }
 }
