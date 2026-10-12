@@ -16,7 +16,7 @@ spec:
 
       containers:
         - name: mcp-server
-          image: docker.io/jeetulsamaiya1/portfolio:mcp-server-main-014
+          image: docker.io/jeetulsamaiya1/portfolio:mcp-server-main-015
           ports:
             - containerPort: 8080
           resources:
