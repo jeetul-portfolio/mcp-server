@@ -42,6 +42,12 @@ All tools return `{"data": ...}` or an error result `{"error": <code>, "message"
 | projects | `portfolio_projects_{list,get,create,update,delete,set_published,reorder}` — `title` (required on create), `slug`, `summary`, `description`, `problem`, `solution`, `technicalDecisions`, `outcomes`, `technologies[]`, `tags[]`, `skillIds[]`, `links[{type: repository\|demo\|documentation\|other, label, url}]`, `coverImage`, `images[{url, alt}]`, `isFeatured`, `sortOrder`, `status` (`status`, `featured`, `tag` filters on list) |
 | resumes | `portfolio_resumes_{list,get_active,activate,delete}` (PDF upload is deliberately not exposed) |
 
+**Content detail.** A project's `description` is its complete case study: one full GitHub-flavoured markdown document
+(tables, task lists, code, ```` ```mermaid ```` diagrams, images) rendered as the project page body with an automatic table of
+contents; `problem`/`solution`/`technicalDecisions`/`outcomes` are optional extra sections. The create/update tool descriptions and
+server instructions tell clients to write full, specific detail, send the whole rewritten document on updates (never a fragment),
+and ask the user for missing facts instead of inventing them.
+
 Lists accept `page` (≥1), `pageSize` (1–500) and `search`. Experience/project `list` and `get` use core's
 `admin/*` read routes, so drafts are included; `get` takes exactly one of `id` or `slug` (slug validated locally
 against `^[a-z0-9]+(?:-[a-z0-9]+)*$`, max 160). `reorder` takes a non-empty list of unique ids and sets each one's

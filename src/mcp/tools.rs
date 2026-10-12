@@ -220,8 +220,10 @@ pub enum ProjectLinkType {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ProjectLink {
+    /// repository = source code, demo = live site/app, documentation = docs, other = anything else.
     #[serde(rename = "type")]
     pub kind: ProjectLinkType,
+    /// Specific name shown on the page, e.g. "Backend (Go)" or "Staging".
     pub label: String,
     /// Absolute http(s) URL.
     pub url: String,
@@ -255,9 +257,10 @@ pub struct NewExperience {
     /// YYYY-MM-DD, on or after startDate; ignored when isCurrent is true.
     pub end_date: Option<String>,
     pub is_current: Option<bool>,
-    /// Short plain text.
+    /// 1-2 sentence plain-text overview of the role.
     pub summary: Option<String>,
-    /// Markdown.
+    /// Full markdown write-up of the role: scope, team, systems owned, impact (GitHub-flavoured,
+    /// ```mermaid supported). Max 100,000 chars.
     pub description: Option<String>,
     pub responsibilities: Option<Vec<String>>,
     pub achievements: Option<Vec<String>>,
@@ -290,7 +293,8 @@ pub struct ExperiencePatch {
     /// true clears endDate.
     pub is_current: Option<bool>,
     pub summary: Option<String>,
-    /// Markdown.
+    /// Full markdown write-up of the role: scope, team, systems owned, impact (GitHub-flavoured,
+    /// ```mermaid supported). Max 100,000 chars.
     pub description: Option<String>,
     pub responsibilities: Option<Vec<String>>,
     pub achievements: Option<Vec<String>>,
@@ -309,22 +313,26 @@ pub struct NewProject {
     pub title: String,
     /// Generated from title when omitted; must be unique.
     pub slug: Option<String>,
-    /// Short plain text.
+    /// 1-2 sentence plain-text hook for project cards and the page meta description.
     pub summary: Option<String>,
-    /// Markdown.
+    /// The complete case study as ONE full markdown document (GitHub-flavoured: headings, tables,
+    /// task lists, code blocks, ```mermaid diagrams, images). Rendered as the project page body with an
+    /// automatic table of contents. Max 100,000 chars.
     pub description: Option<String>,
-    /// Markdown.
+    /// Optional extra markdown section shown after the case study; omit when `description` covers it.
     pub problem: Option<String>,
-    /// Markdown.
+    /// Optional extra markdown section shown after the case study; omit when `description` covers it.
     pub solution: Option<String>,
-    /// Markdown.
+    /// Optional extra markdown section shown after the case study; omit when `description` covers it.
     pub technical_decisions: Option<String>,
-    /// Markdown.
+    /// Optional extra markdown section shown after the case study; omit when `description` covers it.
     pub outcomes: Option<String>,
     pub technologies: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
     /// Ids of existing skills.
     pub skill_ids: Option<Vec<u64>>,
+    /// All external links, up to 20; any number per type (e.g. separate backend and frontend repos,
+    /// production and staging demos). Shown on the project page grouped by type. Replaces the whole list.
     pub links: Option<Vec<ProjectLink>>,
     /// Absolute http(s) URL.
     pub cover_image: Option<String>,
@@ -340,21 +348,26 @@ pub struct NewProject {
 pub struct ProjectPatch {
     pub title: Option<String>,
     pub slug: Option<String>,
+    /// 1-2 sentence plain-text hook for project cards and the page meta description.
     pub summary: Option<String>,
-    /// Markdown.
+    /// The complete case study as ONE full markdown document (GitHub-flavoured: headings, tables,
+    /// task lists, code blocks, ```mermaid diagrams, images). Rendered as the project page body with an
+    /// automatic table of contents. Max 100,000 chars.
     pub description: Option<String>,
-    /// Markdown.
+    /// Optional extra markdown section shown after the case study; omit when `description` covers it.
     pub problem: Option<String>,
-    /// Markdown.
+    /// Optional extra markdown section shown after the case study; omit when `description` covers it.
     pub solution: Option<String>,
-    /// Markdown.
+    /// Optional extra markdown section shown after the case study; omit when `description` covers it.
     pub technical_decisions: Option<String>,
-    /// Markdown.
+    /// Optional extra markdown section shown after the case study; omit when `description` covers it.
     pub outcomes: Option<String>,
     pub technologies: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
     /// Replaces the whole skill set.
     pub skill_ids: Option<Vec<u64>>,
+    /// All external links, up to 20; any number per type (e.g. separate backend and frontend repos,
+    /// production and staging demos). Shown on the project page grouped by type. Replaces the whole list.
     pub links: Option<Vec<ProjectLink>>,
     /// Absolute http(s) URL.
     pub cover_image: Option<String>,
@@ -772,14 +785,20 @@ impl PortfolioServer {
     }
     #[tool(
         name = "portfolio_experiences_create",
-        description = "Create a work experience (draft by default). Requires role and company."
+        description = "Create a work experience (draft by default). Requires role and company. \
+            Fill it in full detail, not a stub: dates, employmentType, location, a 1-2 sentence summary, \
+            a complete markdown description, concrete responsibilities and achievements (with real \
+            metrics), technologies, tags and skillIds. Use only facts the user gave; ask for missing \
+            details instead of inventing them."
     )]
     async fn experiences_create(&self, Parameters(i): Parameters<NewExperience>) -> CallToolResult {
         self.run(Self::create(Entity::Experience, &i)).await
     }
     #[tool(
         name = "portfolio_experiences_update",
-        description = "Update an experience by id. Only supplied fields change; supplied arrays replace the whole list.",
+        description = "Update an experience by id. Only supplied fields change; supplied arrays replace the whole list, \
+            so send the complete updated list. To revise the description, send the full rewritten \
+            markdown (it replaces the whole text), never a fragment. Keep the same level of detail.",
         annotations(idempotent_hint = true)
     )]
     async fn experiences_update(
@@ -852,14 +871,21 @@ impl PortfolioServer {
     }
     #[tool(
         name = "portfolio_projects_create",
-        description = "Create a project (draft by default). Requires title."
+        description = "Create a project (draft by default). Requires title. Write a fully detailed case study, not an \
+            outline: put the complete markdown document in `description` (context, problem, architecture \
+            with a ```mermaid diagram, key technical decisions and trade-offs, results with real metrics, \
+            lessons learned), plus a 1-2 sentence summary, technologies, tags, skillIds and links. Use \
+            only facts the user gave; ask for missing details instead of inventing them."
     )]
     async fn projects_create(&self, Parameters(i): Parameters<NewProject>) -> CallToolResult {
         self.run(Self::create(Entity::Project, &i)).await
     }
     #[tool(
         name = "portfolio_projects_update",
-        description = "Update a project by id. Only supplied fields change; supplied arrays replace the whole list.",
+        description = "Update a project by id. Only supplied fields change; supplied arrays replace the whole list, \
+            so send the complete updated list. To revise the case study, fetch it first and send the \
+            full rewritten markdown `description` (it replaces the whole document), never a fragment or \
+            diff. Keep the same level of detail.",
         annotations(idempotent_hint = true)
     )]
     async fn projects_update(
@@ -945,6 +971,12 @@ impl PortfolioServer {
 impl ServerHandler for PortfolioServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
-            .with_instructions("Admin tools for managing portfolio content (skills, categories, articles, tags, experiences, projects, resumes).")
+            .with_instructions(
+                "Admin tools for managing portfolio content (skills, categories, articles, tags, experiences, \
+                 projects, resumes). Everything written here is published to a public portfolio: create and \
+                 update experiences and projects with full, specific detail (a project's `description` is its \
+                 complete markdown case study), use only facts the user supplied, and ask when information \
+                 is missing rather than inventing it.",
+            )
     }
 }

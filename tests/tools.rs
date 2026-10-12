@@ -367,3 +367,41 @@ async fn experience_and_project_create_send_camel_case_bodies() {
         other => panic!("{other:?}"),
     }
 }
+
+#[tokio::test]
+async fn content_tools_ask_for_fully_detailed_markdown() {
+    let h = harness().await;
+    h.start_session().await;
+    let t = token(&h.keys, KID, json!({}));
+    let (_, _, body) = h.rpc(Some(&t), list()).await;
+    let tools = parse(&body)["result"]["tools"].as_array().unwrap().clone();
+    let find = |n: &str| tools.iter().find(|t| t["name"] == n).unwrap().clone();
+
+    for name in [
+        "portfolio_projects_create",
+        "portfolio_projects_update",
+        "portfolio_experiences_create",
+        "portfolio_experiences_update",
+    ] {
+        let description = find(name)["description"].as_str().unwrap().to_owned();
+        assert!(description.contains("detail"), "{name}: {description}");
+        assert!(
+            !description.contains('\n') && !description.contains("  "),
+            "{name} description should be one clean line: {description:?}"
+        );
+    }
+    assert!(find("portfolio_projects_create")["description"]
+        .as_str()
+        .unwrap()
+        .contains("instead of inventing"));
+
+    let case_study = find("portfolio_projects_create")["inputSchema"]["properties"]["description"]
+        ["description"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        case_study.contains("full markdown document"),
+        "{case_study}"
+    );
+}
