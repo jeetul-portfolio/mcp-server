@@ -17,7 +17,7 @@
     {
       "name": "mcp-server",
       "replicas": 1,
-      "image": "docker.io/jeetulsamaiya1/portfolio:mcp-server-main-015",
+      "image": "docker.io/jeetulsamaiya1/portfolio:mcp-server-main-016",
       "containerPort": 8080,
       "preStartCommands": [],
       "service": {
