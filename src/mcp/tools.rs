@@ -116,13 +116,15 @@ pub struct CategoryPatch {
 pub struct NewArticle {
     /// Title (1-255 chars).
     pub title: String,
-    /// Article body (markdown/HTML as used by the site).
+    /// Article body (markdown/HTML as used by the site). `##tag` mentions also become tags.
     pub content: String,
+    /// Author display name (1-120 chars). Required by core.
+    pub author_name: String,
+    /// Up to 50 tag names (1-80 chars each); names differing only in case/spacing are merged.
     pub tags: Option<Vec<String>>,
     pub excerpt: Option<String>,
     /// Absolute URL.
     pub cover_image: Option<String>,
-    pub author_name: Option<String>,
     /// Absolute URL.
     pub author_avatar: Option<String>,
     /// `draft` (default) or `published`.
@@ -136,9 +138,11 @@ pub struct NewArticle {
 pub struct ArticlePatch {
     pub title: Option<String>,
     pub content: Option<String>,
+    /// Replaces the whole tag list (up to 50 names, 1-80 chars each).
     pub tags: Option<Vec<String>>,
     pub excerpt: Option<String>,
     pub cover_image: Option<String>,
+    /// Author display name (1-120 chars); cannot be cleared.
     pub author_name: Option<String>,
     pub author_avatar: Option<String>,
     pub status: Option<ArticleStatus>,
@@ -428,7 +432,7 @@ impl PortfolioServer {
     }
     #[tool(
         name = "portfolio_articles_create",
-        description = "Create an article (draft by default)."
+        description = "Create an article (draft by default). Requires title, content and authorName."
     )]
     async fn articles_create(&self, Parameters(i): Parameters<NewArticle>) -> CallToolResult {
         self.run(Self::create(Entity::Article, &i)).await

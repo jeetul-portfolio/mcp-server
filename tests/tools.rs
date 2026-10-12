@@ -32,6 +32,12 @@ async fn discovery_lists_namespaced_tools_with_schemas_and_hints() {
     };
     let create = find("portfolio_skills_create");
     assert_eq!(create["inputSchema"]["required"], json!(["name"]));
+    let mut article_required: Vec<String> = serde_json::from_value(
+        find("portfolio_articles_create")["inputSchema"]["required"].clone(),
+    )
+    .unwrap();
+    article_required.sort();
+    assert_eq!(article_required, ["authorName", "content", "title"]);
     assert_eq!(
         find("portfolio_skills_delete")["annotations"]["destructiveHint"],
         true

@@ -36,7 +36,7 @@ All tools return `{"data": ...}` or an error result `{"error": <code>, "message"
 |---|---|
 | skills | `portfolio_skills_{list,get,create,update,delete}` — `name`, `categoryIds[]`, `level`, `notes`, `sortOrder`, `references[{type: article\|experience\|project, referenceId}]` |
 | categories | `portfolio_categories_{list,get,create,update,delete}` — `name`, `description`, `sortOrder` (`includeSkills` on list) |
-| articles | `portfolio_articles_{list,get,create,update,delete}`, `portfolio_articles_set_published` — `title`, `content`, `tags[]`, `excerpt`, `coverImage`, `authorName`, `authorAvatar`, `status`, `publishedAt` |
+| articles | `portfolio_articles_{list,get,create,update,delete}`, `portfolio_articles_set_published` — `title`, `content`, `authorName` (all required on create), `tags[]`, `excerpt`, `coverImage`, `authorAvatar`, `status`, `publishedAt` |
 | tags | `portfolio_tags_{list,get,create,update,delete}` — `name`, `group`, `color`, `description`, `isSeoEnabled`, `isInternal` |
 | resumes | `portfolio_resumes_{list,get_active,activate,delete}` (PDF upload is deliberately not exposed) |
 
